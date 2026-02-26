@@ -1,4 +1,4 @@
-from asyncio import all_tasks, sleep as asleep
+from asyncio import all_tasks, sleep as asleep, gather
 from aiofiles import open as aiopen
 from pyrogram import idle
 from pyrogram.filters import command, user
@@ -11,6 +11,7 @@ from bot import bot, Var, bot_loop, sch, LOGS, ffQueue, ffLock, ffpids_cache, ff
 from bot.core.rss_fetcher import fetch_rss
 from bot.core.func_utils import clean_up, new_task
 from bot.core.database import db
+from bot.health_check_standalone import start_health_server
 
 
 # ==========================
@@ -135,6 +136,9 @@ async def safe_start():
 # MAIN FUNCTION
 # ==========================
 async def main():
+    # Start health check server in background (runs independently)
+    health_task = bot_loop.create_task(start_health_server())
+    
     await safe_start()
 
     await restart_notify()
