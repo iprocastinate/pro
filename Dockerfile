@@ -6,8 +6,7 @@ RUN chmod 777 /usr/src/app
 # Update and install dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    git wget pv jq python3-dev mediainfo gcc \
-    libsm6 libxext6 libfontconfig1 libxrender1 libgl1-mesa-glx && \
+    git wget pv jq python3-dev mediainfo gcc && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
