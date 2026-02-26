@@ -1,0 +1,12 @@
+version: 1
+
+services:
+  - name: auto-adult-bot
+    type: worker
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: python3 -m bot
+    health:
+      disabled: true
+    env:
+      - key: PYTHON_UNBUFFERED
+        value: '1'
