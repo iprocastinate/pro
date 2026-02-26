@@ -7,7 +7,8 @@ from math import floor
 from os import path as ospath
 from time import time, sleep
 from traceback import format_exc
-from asyncio import sleep as asleep, create_subprocess_shell
+import asyncio
+from asyncio import sleep as asleep, create_subprocess_shell, wait_for, TimeoutError as AsyncTimeoutError
 from asyncio.subprocess import PIPE
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 
@@ -23,6 +24,9 @@ from pyrogram.errors import MessageNotModified, FloodWait, UserNotParticipant, R
 from bot import bot, bot_loop, LOGS, Var
 from .reporter import rep
 
+# Create a single thread pool executor at module level to avoid creating hundreds of new executors
+_thread_pool = ThreadPoolExecutor(max_workers=min(5, cpu_count()), thread_name_prefix="sync_worker_")
+
 def handle_logs(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
@@ -32,10 +36,28 @@ def handle_logs(func):
             await rep.report(format_exc(), "error")
     return wrapper
     
-async def sync_to_async(func, *args, wait=True, **kwargs):
-    pfunc = partial(func, *args, **kwargs)
-    future = bot_loop.run_in_executor(ThreadPoolExecutor(max_workers=cpu_count() * 125), pfunc)
-    return await future if wait else future
+async def sync_to_async(func, *args, timeout=30, wait=True, **kwargs):
+    """Run sync function in thread pool with timeout protection"""
+    try:
+        pfunc = partial(func, *args, **kwargs)
+        
+        # Get the current event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = bot_loop
+        
+        future = loop.run_in_executor(_thread_pool, pfunc)
+        
+        # Add timeout to prevent hanging
+        result = await wait_for(future, timeout=timeout)
+        return result if wait else future
+    except AsyncTimeoutError:
+        LOGS.error(f"⏱️ TIMEOUT: {func.__name__}() exceeded {timeout}s limit")
+        return None
+    except Exception as e:
+        LOGS.error(f"❌ ERROR in sync_to_async({func.__name__}): {str(e)}")
+        return None
     
 def new_task(func):
     @wraps(func)
@@ -43,9 +65,22 @@ def new_task(func):
         return bot_loop.create_task(func(*args, **kwargs))
     return wrapper
 
-async def getfeed(link, index=0):
+async def getfeed(link, index=0, timeout=15):
+    """Fetch RSS feed with timeout protection"""
     try:
-        feed = await sync_to_async(feedparse, link)
+        LOGS.debug(f"🔄 Fetching RSS: {link} (index={index})")
+        
+        # Feed parsing with 15-second timeout
+        feed = await sync_to_async(feedparse, link, timeout=timeout)
+        
+        if not feed or not hasattr(feed, 'entries') or len(feed.entries) == 0:
+            LOGS.warning(f"⚠️ RSS feed returned empty or no entries: {link}")
+            return None
+        
+        if index >= len(feed.entries):
+            LOGS.debug(f"Index {index} out of range for feed (has {len(feed.entries)} entries)")
+            return None
+        
         entry = feed.entries[index]
         
         size = (entry.get('nyaa_size') or 
