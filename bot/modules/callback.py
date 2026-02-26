@@ -457,6 +457,7 @@ async def auto_upload_off_cb(_, cb):
     ani_cache['AUTO_UPLOAD_ENABLED'] = False
     await db.set_auto_upload_enabled(False)
     ani_cache['UPLOADS_TODAY'] = 0
+    await db.reset_daily_uploads()
     
     text = "<b><blockquote>✦ 𝗔𝗨𝗧𝗢 𝗨𝗣𝗟𝗢𝗔𝗗 𝗦𝗧𝗔𝗧𝗨𝗦 ✦</blockquote>\n<blockquote>✦ 𝗦𝗧𝗔𝗧𝗘: 𝗗𝗜𝗦𝗔𝗕𝗟𝗘𝗗</blockquote></b>"
     
@@ -618,6 +619,22 @@ INSULTS = load_insults()
 @bot.on_callback_query()
 async def handle_callbacks(client, cb):
     data = cb.data
+    uid = cb.from_user.id
+    
+    # Check if user is admin/owner for sensitive operations
+    sensitive_operations = [
+        "bot_settings_cb", "bot_mode_cb", "white_mode_set_cb", "default_mode_set_cb",
+        "auto_upload_settings_cb", "set_day_upload_cb", "set_upload_time_cb", "set_auto_upload_cb",
+        "auto_upload_on_cb", "auto_upload_off_cb", "user_settings_cb",
+        "add_whitelist_cb", "remove_whitelist_cb", "list_whitelist_cb",
+        "add_admin_cb", "remove_admin_cb", "list_admin_cb",
+        "add_ban_cb", "remove_ban_cb", "list_ban_cb"
+    ]
+    
+    if data in sensitive_operations:
+        if uid != Var.OWNER and uid not in Var.ADMINS:
+            await cb.answer('✦ ᴏɴʟʏ ᴀᴅᴍɪɴs/ᴏᴡɴᴇʀ ᴄᴀɴ ᴀᴄᴄᴇss ᴛʜɪs ✦', show_alert=True)
+            return
     
     if data == "about_cb":
         await about_cb(client, cb)
