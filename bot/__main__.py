@@ -5,6 +5,7 @@ from pyrogram.filters import command, user
 from os import path as ospath, execl, kill
 from sys import executable
 from signal import SIGKILL
+import time
 
 from bot import bot, Var, bot_loop, sch, LOGS, ffQueue, ffLock, ffpids_cache, ff_queued, ani_cache
 from bot.core.rss_fetcher import fetch_rss
@@ -92,6 +93,24 @@ async def load_bot_settings():
         LOGS.info("Using default bot settings")
 
 async def main():
+    # Check if we're recovering from recent crash (prevent flood wait)
+    startup_delay_file = ".startup_delay"
+    if ospath.isfile(startup_delay_file):
+        try:
+            with open(startup_delay_file, 'r') as f:
+                last_start = float(f.read().strip())
+            time_since_last = time.time() - last_start
+            if time_since_last < 30:  # If less than 30 seconds since last start
+                wait_time = 30 - time_since_last
+                LOGS.warning(f"Recent restart detected. Waiting {wait_time:.1f}s to avoid Telegram flood wait...")
+                await asleep(wait_time)
+        except:
+            pass
+    
+    # Record startup time
+    with open(startup_delay_file, 'w') as f:
+        f.write(str(time.time()))
+    
     await bot.start()
     await restart()
     LOGS.info('Auto Adult Bot Started!')
