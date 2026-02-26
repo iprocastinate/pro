@@ -152,5 +152,58 @@ class MongoDB:
             }
         return {'enabled': False, 'day_limit': 1, 'upload_time': '12:00 PM'}
 
+    async def increment_daily_uploads(self):
+        """Increment the daily upload counter for today"""
+        today = datetime.utcnow().date()
+        await self.__settings.update_one(
+            {'_id': 'bot_settings'},
+            {
+                '$set': {
+                    'LAST_UPLOAD_DATE': str(today),
+                    'updated_at': datetime.utcnow()
+                },
+                '$inc': {'UPLOADS_TODAY': 1}
+            },
+            upsert=True
+        )
+
+    async def get_daily_upload_count(self):
+        """Get the current daily upload count, resetting if date changed"""
+        settings = await self.__settings.find_one({'_id': 'bot_settings'})
+        if not settings:
+            return 0
+        
+        today = datetime.utcnow().date()
+        last_date = settings.get('LAST_UPLOAD_DATE')
+        
+        # Check if date has changed, reset if needed
+        if last_date != str(today):
+            await self.__settings.update_one(
+                {'_id': 'bot_settings'},
+                {
+                    '$set': {
+                        'UPLOADS_TODAY': 0,
+                        'LAST_UPLOAD_DATE': str(today),
+                        'updated_at': datetime.utcnow()
+                    }
+                }
+            )
+            return 0
+        
+        return settings.get('UPLOADS_TODAY', 0)
+
+    async def reset_daily_uploads(self):
+        """Reset daily upload counter"""
+        await self.__settings.update_one(
+            {'_id': 'bot_settings'},
+            {
+                '$set': {
+                    'UPLOADS_TODAY': 0,
+                    'updated_at': datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+
 
 db = MongoDB(Var.MONGO_URI, Var.MONGO_DB)
