@@ -1,8 +1,7 @@
 version: 1
 
 # Koyeb Configuration for Auto Adult Bot
-# This is a background worker service (not a web service)
-# It does not expose HTTP ports, so health checks should be disabled
+# This is a background worker service with a health check server on port 8000
 
 services:
   - name: auto-adult-bot
@@ -10,11 +9,12 @@ services:
     buildCommand: pip install --no-cache-dir -r requirements.txt
     startCommand: python3 -m bot
     
-    # IMPORTANT: Disable health checks as this is a background worker
-    # that doesn't expose HTTP endpoints
+    # Health checks configured for port 8000 (health check server)
     healthChecks:
-      disabled: true
+      tcp:
+        port: 8000
     
     env:
       - key: PYTHONUNBUFFERED
         value: '1'
+
