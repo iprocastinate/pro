@@ -120,17 +120,23 @@ async def should_auto_upload():
     try:
         # Get auto-upload settings from database
         settings = await db.get_auto_upload_settings()
+        enabled = settings.get('enabled', False)
+        day_limit = settings.get('day_limit', 1)
+        upload_time_str = settings.get('upload_time', '12:00')
         
-        if not settings['enabled']:
-            LOGS.info("Auto upload is disabled, allowing unlimited uploads")
-            return True
+        LOGS.debug(f"[AUTO-UPLOAD CHECK] Enabled={enabled}, DayLimit={day_limit}, UploadTime={upload_time_str}")
+        
+        # If auto-upload is disabled, don't queue anything
+        if not enabled:
+            LOGS.debug("Auto upload is DISABLED - skipping torrent")
+            return False
         
         # Get the current daily upload count
         uploads_today = await db.get_daily_upload_count()
-        day_limit = settings['day_limit']
         
+        # Check if daily limit already reached
         if uploads_today >= day_limit:
-            LOGS.info(f"Daily upload limit reached: {uploads_today}/{day_limit}")
+            LOGS.info(f"⏸️ Daily upload limit REACHED: {uploads_today}/{day_limit} - pausing uploads")
             return False
         
         # Check if current time is past the scheduled upload time
@@ -138,92 +144,117 @@ async def should_auto_upload():
         current_dt = datetime.now(ist)
         current_time = current_dt.time()
         
-        upload_time_str = settings['upload_time']
-        
         try:
+            # Try 24-hour format first (e.g., "14:30")
             time_obj = datetime.strptime(upload_time_str, "%H:%M").time()
         except ValueError:
-            # Try parsing with AM/PM format
-            time_clean = upload_time_str.replace('AM', '').replace('PM', '').strip()
             try:
+                # Try 12-hour format with AM/PM (e.g., "2:30 PM")
+                time_clean = upload_time_str.replace('AM', '').replace('PM', '').strip()
                 time_obj = datetime.strptime(time_clean, "%H:%M").time()
             except ValueError:
-                LOGS.warning(f"Could not parse upload time: {upload_time_str}, skipping upload")
+                LOGS.error(f"❌ Could not parse upload time: {upload_time_str} - blocking upload")
                 return False
         
+        # Check if current time is past the scheduled upload time
         if current_time >= time_obj:
-            # Increment upload counter in database
-            await db.increment_daily_uploads()
-            LOGS.info(f"Upload allowed - Time: {current_time.hour:02d}:{current_time.minute:02d}, Scheduled: {time_obj.hour:02d}:{time_obj.minute:02d}, Uploaded: {uploads_today + 1}/{day_limit}")
+            LOGS.info(f"✅ AUTO-UPLOAD ALLOWED - Current: {current_time.strftime('%H:%M')}, Scheduled: {time_obj.strftime('%H:%M')}, Daily: {uploads_today}/{day_limit}")
+            # DO NOT increment counter here - only increment after actual upload succeeds
             return True
         else:
-            LOGS.info(f"Before upload time. Current: {current_time.hour:02d}:{current_time.minute:02d}, Scheduled: {time_obj.hour:02d}:{time_obj.minute:02d}")
+            LOGS.debug(f"⏳ Before upload time - Current: {current_time.strftime('%H:%M')}, Scheduled: {time_obj.strftime('%H:%M')} - blocking upload")
             return False
     
     except Exception as e:
-        LOGS.error(f"Error checking auto upload settings: {str(e)}")
+        LOGS.error(f"❌ Error checking auto upload settings: {str(e)}")
         return False
 
 
 async def torrent_processor():
-    LOGS.info("Torrent Processor Started!")
+    LOGS.info("🚀 TORRENT PROCESSOR STARTED - Waiting for torrents in queue")
     while True:
         await asleep(2)
-        if not ani_cache['processing_torrent'] and len(ani_cache['torrent_queue']) > 0:
+        
+        queue_size = len(ani_cache['torrent_queue'])
+        is_processing = ani_cache['processing_torrent']
+        
+        if not is_processing and queue_size > 0:
             torrent_data = ani_cache['torrent_queue'].pop(0)
             ani_cache['processing_torrent'] = True
-            LOGS.info(f"Starting torrent from queue: {torrent_data['title'][:50]} (Queue remaining: {len(ani_cache['torrent_queue'])})")
-            await get_rss(
-                title=torrent_data['title'],
-                torrent_url=torrent_data.get('torrent_url'),
-                publish_date=torrent_data.get('publish_date'),
-                size=torrent_data.get('size'),
-                seeders=torrent_data.get('seeders', 0),
-                leechers=torrent_data.get('leechers', 0),
-                info_hash=torrent_data.get('info_hash'),
-                category=torrent_data.get('category'),
-                force=torrent_data.get('force', False),
-                is_telegram=torrent_data.get('is_telegram', False),
-                file_id=torrent_data.get('file_id'),
-                file_size=torrent_data.get('file_size')
-            )
+            
+            remaining = len(ani_cache['torrent_queue'])
+            LOGS.info(f"▶️ PROCESSING - Title: {torrent_data['title'][:50]} | Queue remaining: {remaining}")
+            
+            try:
+                await get_rss(
+                    title=torrent_data['title'],
+                    torrent_url=torrent_data.get('torrent_url'),
+                    publish_date=torrent_data.get('publish_date'),
+                    size=torrent_data.get('size'),
+                    seeders=torrent_data.get('seeders', 0),
+                    leechers=torrent_data.get('leechers', 0),
+                    info_hash=torrent_data.get('info_hash'),
+                    category=torrent_data.get('category'),
+                    force=torrent_data.get('force', False),
+                    is_telegram=torrent_data.get('is_telegram', False),
+                    file_id=torrent_data.get('file_id'),
+                    file_size=torrent_data.get('file_size')
+                )
+            except Exception as e:
+                LOGS.error(f"❌ ERROR PROCESSING TORRENT: {str(e)}")
+            
             ani_cache['processing_torrent'] = False
+        elif queue_size == 0 and not is_processing:
+            LOGS.debug("⏳ Waiting for torrents... (queue empty)")
+        elif is_processing:
+            LOGS.debug(f"⏳ Processing in progress... (queue: {queue_size} pending)")
 
 async def fetch_rss():
     global last_torrent_id
     
     await rep.report("Fetching has been Started.", "info")
+    LOGS.info("✓ RSS Fetching started - checking feeds every 60 seconds")
+    
     while True:
         await asleep(60)
         if ani_cache['fetch_rss']:
+            LOGS.debug(f"[RSS CHECK] Checking {len(Var.RSS_ITEMS)} RSS feed(s)")
+            
             for link in Var.RSS_ITEMS:
-                if (info := await getfeed(link, 0)):
-                    torrent_hash = info.get('info_hash', '')
-                    torrent_url = info.get('link', '')
-                    torrent_title = info.get('title', 'Unknown')
-                    
-                    torrent_id = torrent_hash or torrent_url
-                    
-                    if torrent_id != last_torrent_id:
-                        last_torrent_id = torrent_id
-                        LOGS.info(f"New torrent detected at position 0: {torrent_title[:50]}")
+                try:
+                    if (info := await getfeed(link, 0)):
+                        torrent_hash = info.get('info_hash', '')
+                        torrent_url = info.get('link', '')
+                        torrent_title = info.get('title', 'Unknown')
+                        torrent_size = info.get('size', 'Unknown')
                         
-                        if await should_auto_upload():
-                            ani_cache['torrent_queue'].append({
-                                'title': torrent_title,
-                                'torrent_url': torrent_url,
-                                'publish_date': info.get('published'),
-                                'size': info.get('size'),
-                                'seeders': info.get('seeders', 0),
-                                'leechers': info.get('leechers', 0),
-                                'info_hash': torrent_hash,
-                                'category': info.get('category')
-                            })
-                            LOGS.info(f"Torrent queued. Queue size: {len(ani_cache['torrent_queue'])}")
+                        torrent_id = torrent_hash or torrent_url
+                        
+                        if torrent_id != last_torrent_id:
+                            last_torrent_id = torrent_id
+                            LOGS.info(f"📢 NEW TORRENT: {torrent_title[:50]} | Size: {torrent_size}")
+                            
+                            if await should_auto_upload():
+                                ani_cache['torrent_queue'].append({
+                                    'title': torrent_title,
+                                    'torrent_url': torrent_url,
+                                    'publish_date': info.get('published'),
+                                    'size': torrent_size,
+                                    'seeders': info.get('seeders', 0),
+                                    'leechers': info.get('leechers', 0),
+                                    'info_hash': torrent_hash,
+                                    'category': info.get('category')
+                                })
+                                LOGS.info(f"✅ Torrent QUEUED - Queue size: {len(ani_cache['torrent_queue'])}")
+                                await rep.report(f"📢 New Torrent Queued!\n\n{torrent_title[:60]}\nSize: {torrent_size}", "info")
+                            else:
+                                LOGS.info(f"⏸️ Torrent SKIPPED (auto-upload check failed): {torrent_title[:50]}")
                         else:
-                            LOGS.info(f"Torrent skipped due to auto upload restrictions: {torrent_title[:50]}")
-                    else:
-                        LOGS.debug(f"Same torrent at position 0, skipping: {torrent_title[:50]}")
+                            LOGS.debug(f"Same torrent, skipping: {torrent_title[:50]}")
+                except Exception as e:
+                    LOGS.error(f"Error fetching from RSS {link}: {str(e)}")
+        else:
+            LOGS.debug("RSS fetching is PAUSED")
 
 async def get_rss(title: str, torrent_url: str, publish_date=None, size=None, 
                   seeders=0, leechers=0, info_hash=None, category=None, force=False,
@@ -443,7 +474,13 @@ async def get_rss(title: str, torrent_url: str, publish_date=None, size=None,
             torrent_info_dict['post_id'] = post_msg.id
             await db.saveTorrent(torrent_info_dict)
             
-            await rep.report(f"Upload Complete! Posted to channel", "info")
+            # Increment daily upload counter AFTER successful upload
+            await db.increment_daily_uploads()
+            upload_count = await db.get_daily_upload_count()
+            upload_limit = (await db.get_auto_upload_settings()).get('day_limit', 1)
+            
+            await rep.report(f"✅ Upload Complete! Posted to channel\n📊 Daily Uploads: {upload_count}/{upload_limit}", "info")
+            LOGS.info(f"✅ SUCCESSFUL UPLOAD - Daily count now: {upload_count}/{upload_limit}")
 
         except Exception as e:
             LOGS.error(f"Error sending final post: {e}")
