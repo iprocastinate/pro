@@ -1,4 +1,4 @@
-FROM python:3.10-slim-buster
+FROM python:3.10-slim-bookworm
 
 WORKDIR /usr/src/app
 RUN chmod 777 /usr/src/app
@@ -22,10 +22,6 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Create necessary directories
 RUN mkdir -p encode thumbs downloads
-
-# Health check (optional)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python3 -c "import socket; socket.create_connection(('127.0.0.1', 80), timeout=5)" || exit 1
 
 # Run the bot
 CMD ["python3", "-m", "bot"]
