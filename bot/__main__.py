@@ -111,7 +111,40 @@ async def main():
     with open(startup_delay_file, 'w') as f:
         f.write(str(time.time()))
     
-    await bot.start()
+    # Try to start bot, catch FloodWait and wait it out
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            await bot.start()
+            break  # Success
+        except Exception as e:
+            error_str = str(e)
+            # Check if it's a FloodWait error
+            if "FloodWait" in error_str or "420" in error_str:
+                # Extract wait time if possible
+                try:
+                    wait_seconds = int(''.join(filter(str.isdigit, error_str.split("wait of")[-1])))
+                except:
+                    wait_seconds = 1800  # Default 30 minutes
+                
+                LOGS.error(f"Telegram FloodWait: Must wait {wait_seconds} seconds before retrying...")
+                LOGS.error(f"Waiting until flood protection is lifted...")
+                
+                # Add some buffer time
+                wait_with_buffer = wait_seconds + 60
+                LOGS.warning(f"Sleeping for {wait_with_buffer} seconds ({wait_with_buffer//60}m {wait_with_buffer%60}s)...")
+                
+                # Split into chunks so we can see progress logs
+                for i in range(0, wait_with_buffer, 60):
+                    remaining = wait_with_buffer - i
+                    if remaining > 0:
+                        LOGS.warning(f"Waiting... {remaining} seconds remaining")
+                        await asleep(min(60, remaining))
+            else:
+                # Other error, log and raise
+                LOGS.error(f"Failed to start bot: {e}")
+                raise
+    
     await restart()
     LOGS.info('Auto Adult Bot Started!')
     await load_bot_settings()
