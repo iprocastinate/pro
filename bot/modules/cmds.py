@@ -27,7 +27,7 @@ async def start_msg(client, message):
     if 'INSULT_WARNINGS' not in ani_cache:
         ani_cache['INSULT_WARNINGS'] = {}
     
-    if ani_cache['BOT_MODE'] == 'whitelist' and uid not in Var.ADMINS or not in Var.OWNER:
+    if ani_cache['BOT_MODE'] == 'whitelist' and uid not in Var.ADMINS and uid not in Var.OWNER:
         is_whitelisted = await db.is_whitelisted(uid)
         if not is_whitelisted:
             if uid not in ani_cache['INSULT_WARNINGS']:
