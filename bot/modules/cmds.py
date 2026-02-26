@@ -207,6 +207,7 @@ async def handle_whitelist_input(client, message):
                 ani_cache['UPLOAD_TIME'] = formatted_time
                 await db.set_upload_time(formatted_time)
                 ani_cache['UPLOADS_TODAY'] = 0
+                await db.reset_daily_uploads()
                 await sendMessage(message, f"<b><blockquote>ᴜᴘʟᴏᴀᴅ ᴛɪᴍᴇ sᴇᴛ ᴛᴏ {formatted_time}!</blockquote></b>")
                 LOGS.info(f"Upload time set to {formatted_time} by {message.from_user.id}")
             except ValueError as ve:
@@ -305,6 +306,7 @@ async def handle_whitelist_input(client, message):
                 ani_cache['UPLOAD_DAY_LIMIT'] = day_limit
                 await db.set_upload_day_limit(day_limit)
                 ani_cache['UPLOADS_TODAY'] = 0
+                await db.reset_daily_uploads()
                 await sendMessage(message, f"<b><blockquote>ᴅᴀɪʟʏ ᴜᴘʟᴏᴀᴅ ʟɪᴍɪᴛ sᴇᴛ ᴛᴏ {day_limit}!</blockquote></b>")
                 LOGS.info(f"Daily upload limit set to {day_limit} by {message.from_user.id}")
             except ValueError:
