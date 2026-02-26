@@ -122,13 +122,13 @@ async def should_auto_upload():
         settings = await db.get_auto_upload_settings()
         enabled = settings.get('enabled', False)
         day_limit = settings.get('day_limit', 1)
-        upload_time_str = settings.get('upload_time', '12:00')
+        upload_time_str = settings.get('upload_time', '00:00')
         
-        LOGS.debug(f"[AUTO-UPLOAD CHECK] Enabled={enabled}, DayLimit={day_limit}, UploadTime={upload_time_str}")
+        LOGS.info(f"[AUTO-UPLOAD CHECK] Enabled={enabled}, DayLimit={day_limit}, StoredTime='{upload_time_str}'")
         
         # If auto-upload is disabled, don't queue anything
         if not enabled:
-            LOGS.debug("Auto upload is DISABLED - skipping torrent")
+            LOGS.info("❌ Auto upload is DISABLED - skipping torrent")
             return False
         
         # Get the current daily upload count
@@ -144,29 +144,43 @@ async def should_auto_upload():
         current_dt = datetime.now(ist)
         current_time = current_dt.time()
         
-        try:
-            # Try 24-hour format first (e.g., "14:30")
-            time_obj = datetime.strptime(upload_time_str, "%H:%M").time()
-        except ValueError:
+        time_obj = None
+        
+        # Try multiple time formats
+        formats_to_try = [
+            "%H:%M",      # 04:15, 16:30
+            "%I:%M %p",   # 04:15 PM, 2:30 AM
+            "%H:%M %p",   # 04:15 PM, 16:30 PM (non-standard but possible)
+        ]
+        
+        # Clean the input first
+        upload_time_clean = upload_time_str.strip()
+        
+        # Try each format
+        for fmt in formats_to_try:
             try:
-                # Try 12-hour format with AM/PM (e.g., "2:30 PM")
-                time_clean = upload_time_str.replace('AM', '').replace('PM', '').strip()
-                time_obj = datetime.strptime(time_clean, "%H:%M").time()
+                time_obj = datetime.strptime(upload_time_clean, fmt).time()
+                LOGS.debug(f"✓ Parsed upload time with format '{fmt}': {upload_time_clean}")
+                break
             except ValueError:
-                LOGS.error(f"❌ Could not parse upload time: {upload_time_str} - blocking upload")
-                return False
+                continue
+        
+        if time_obj is None:
+            LOGS.error(f"❌ Could not parse upload time: '{upload_time_str}' - tried formats: {formats_to_try}")
+            return False
         
         # Check if current time is past the scheduled upload time
         if current_time >= time_obj:
             LOGS.info(f"✅ AUTO-UPLOAD ALLOWED - Current: {current_time.strftime('%H:%M')}, Scheduled: {time_obj.strftime('%H:%M')}, Daily: {uploads_today}/{day_limit}")
-            # DO NOT increment counter here - only increment after actual upload succeeds
             return True
         else:
-            LOGS.debug(f"⏳ Before upload time - Current: {current_time.strftime('%H:%M')}, Scheduled: {time_obj.strftime('%H:%M')} - blocking upload")
+            LOGS.info(f"⏳ Before upload time - Current: {current_time.strftime('%H:%M')}, Scheduled: {time_obj.strftime('%H:%M')} - blocking upload")
             return False
     
     except Exception as e:
         LOGS.error(f"❌ Error checking auto upload settings: {str(e)}")
+        import traceback
+        LOGS.error(traceback.format_exc())
         return False
 
 
@@ -213,16 +227,23 @@ async def fetch_rss():
     global last_torrent_id
     
     await rep.report("Fetching has been Started.", "info")
-    LOGS.info("✓ RSS Fetching started - checking feeds every 60 seconds")
+    LOGS.info(f"✓ RSS Fetching started - checking {len(Var.RSS_ITEMS)} feeds every 60 seconds")
+    LOGS.info(f"RSS Feeds configured: {Var.RSS_ITEMS}")
     
     while True:
         await asleep(60)
         if ani_cache['fetch_rss']:
-            LOGS.debug(f"[RSS CHECK] Checking {len(Var.RSS_ITEMS)} RSS feed(s)")
+            LOGS.info(f"[RSS CHECK] Checking {len(Var.RSS_ITEMS)} RSS feed(s)")
             
             for link in Var.RSS_ITEMS:
                 try:
-                    if (info := await getfeed(link, 0)):
+                    # Add timeout to prevent RSS feed from hanging
+                    from asyncio import wait_for, TimeoutError as AsyncTimeoutError
+                    
+                    LOGS.debug(f"Fetching from: {link}")
+                    info = await wait_for(getfeed(link, 0), timeout=20)
+                    
+                    if info:
                         torrent_hash = info.get('info_hash', '')
                         torrent_url = info.get('link', '')
                         torrent_title = info.get('title', 'Unknown')
@@ -230,11 +251,16 @@ async def fetch_rss():
                         
                         torrent_id = torrent_hash or torrent_url
                         
+                        LOGS.debug(f"Feed returned torrent: {torrent_title[:50]}, ID: {torrent_id}")
+                        
                         if torrent_id != last_torrent_id:
                             last_torrent_id = torrent_id
                             LOGS.info(f"📢 NEW TORRENT: {torrent_title[:50]} | Size: {torrent_size}")
                             
-                            if await should_auto_upload():
+                            upload_check = await should_auto_upload()
+                            LOGS.info(f"Auto-upload check result: {upload_check}")
+                            
+                            if upload_check:
                                 ani_cache['torrent_queue'].append({
                                     'title': torrent_title,
                                     'torrent_url': torrent_url,
@@ -245,14 +271,22 @@ async def fetch_rss():
                                     'info_hash': torrent_hash,
                                     'category': info.get('category')
                                 })
-                                LOGS.info(f"✅ Torrent QUEUED - Queue size: {len(ani_cache['torrent_queue'])}")
+                                queued_count = len(ani_cache['torrent_queue'])
+                                LOGS.info(f"✅ Torrent QUEUED - Queue size: {queued_count}")
                                 await rep.report(f"📢 New Torrent Queued!\n\n{torrent_title[:60]}\nSize: {torrent_size}", "info")
                             else:
                                 LOGS.info(f"⏸️ Torrent SKIPPED (auto-upload check failed): {torrent_title[:50]}")
                         else:
                             LOGS.debug(f"Same torrent, skipping: {torrent_title[:50]}")
+                    else:
+                        LOGS.warning(f"⚠️ Feed returned no torrent data: {link}")
+                        
+                except AsyncTimeoutError:
+                    LOGS.error(f"⏱️ TIMEOUT fetching RSS feed: {link} (exceeded 20 seconds)")
                 except Exception as e:
-                    LOGS.error(f"Error fetching from RSS {link}: {str(e)}")
+                    LOGS.error(f"❌ Error fetching from RSS {link}: {str(e)}")
+                    import traceback
+                    LOGS.error(traceback.format_exc())
         else:
             LOGS.debug("RSS fetching is PAUSED")
 
