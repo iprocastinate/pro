@@ -111,41 +111,39 @@ def calculate_total_size(file_paths):
 
 
 def reset_daily_upload_counter():
-    last_date = ani_cache.get('LAST_UPLOAD_DATE')
-    ist = timezone(timedelta(hours=5, minutes=30))
-    today = datetime.now(ist).date()
-    
-    if last_date is None or last_date != str(today):
-        ani_cache['LAST_UPLOAD_DATE'] = str(today)
-        ani_cache['UPLOADS_TODAY'] = 0
-        return True
-    return False
+    """This is now handled by database, keeping for backward compatibility"""
+    pass  # Database handles this automatically
 
 
-def should_auto_upload():
-    if not ani_cache.get('AUTO_UPLOAD_ENABLED', False):
-        LOGS.info("Auto upload is disabled, allowing unlimited uploads")
-        return True
-    
+async def should_auto_upload():
+    """Check if torrent should be auto-uploaded based on DB settings"""
     try:
-        reset_daily_upload_counter()
+        # Get auto-upload settings from database
+        settings = await db.get_auto_upload_settings()
         
-        day_limit = ani_cache.get('UPLOAD_DAY_LIMIT', 1)
-        uploads_today = ani_cache['UPLOADS_TODAY']
+        if not settings['enabled']:
+            LOGS.info("Auto upload is disabled, allowing unlimited uploads")
+            return True
+        
+        # Get the current daily upload count
+        uploads_today = await db.get_daily_upload_count()
+        day_limit = settings['day_limit']
         
         if uploads_today >= day_limit:
             LOGS.info(f"Daily upload limit reached: {uploads_today}/{day_limit}")
             return False
         
+        # Check if current time is past the scheduled upload time
         ist = timezone(timedelta(hours=5, minutes=30))
         current_dt = datetime.now(ist)
         current_time = current_dt.time()
         
-        upload_time_str = ani_cache.get('UPLOAD_TIME', '12:00')
+        upload_time_str = settings['upload_time']
         
         try:
             time_obj = datetime.strptime(upload_time_str, "%H:%M").time()
         except ValueError:
+            # Try parsing with AM/PM format
             time_clean = upload_time_str.replace('AM', '').replace('PM', '').strip()
             try:
                 time_obj = datetime.strptime(time_clean, "%H:%M").time()
@@ -154,8 +152,9 @@ def should_auto_upload():
                 return False
         
         if current_time >= time_obj:
-            ani_cache['UPLOADS_TODAY'] += 1
-            LOGS.info(f"Upload allowed - Time: {current_time.hour:02d}:{current_time.minute:02d}, Scheduled: {time_obj.hour:02d}:{time_obj.minute:02d}, Uploaded: {ani_cache['UPLOADS_TODAY']}/{day_limit}")
+            # Increment upload counter in database
+            await db.increment_daily_uploads()
+            LOGS.info(f"Upload allowed - Time: {current_time.hour:02d}:{current_time.minute:02d}, Scheduled: {time_obj.hour:02d}:{time_obj.minute:02d}, Uploaded: {uploads_today + 1}/{day_limit}")
             return True
         else:
             LOGS.info(f"Before upload time. Current: {current_time.hour:02d}:{current_time.minute:02d}, Scheduled: {time_obj.hour:02d}:{time_obj.minute:02d}")
@@ -209,7 +208,7 @@ async def fetch_rss():
                         last_torrent_id = torrent_id
                         LOGS.info(f"New torrent detected at position 0: {torrent_title[:50]}")
                         
-                        if should_auto_upload():
+                        if await should_auto_upload():
                             ani_cache['torrent_queue'].append({
                                 'title': torrent_title,
                                 'torrent_url': torrent_url,
@@ -429,8 +428,8 @@ async def get_rss(title: str, torrent_url: str, publish_date=None, size=None,
         try:
             caption = await text_editor.get_caption()
             
-            if ani_cache.get('FONT_CHANGER', False):
-                caption = censor_content(caption)
+            # Always censor inappropriate content in captions for safety
+            caption = censor_content(caption)
             
             post_msg = await bot.send_photo(
                 Var.MAIN_CHANNEL,
