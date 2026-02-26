@@ -1,15 +1,12 @@
 services:
   - type: worker
     name: AutoAdultBot
-    runtime: python
-    pythonVersion: '3.10'
-    buildCommand: pip install --no-cache-dir -r requirements.txt
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /
     startCommand: python3 -m bot
     envVars:
-      - key: PYTHON_VERSION
-        value: '3.10'
-      - key: PATH_ORIGINAL
-        fromDatabase:
-          name: default
-          property: connectionString
-    autoDeploy: false
+      - key: PYTHONUNBUFFERED
+        value: '1'
+    autoDeploy: true
