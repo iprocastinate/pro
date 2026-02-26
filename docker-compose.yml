@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auto-adult-bot
+    restart: unless-stopped
+    environment:
+      # Bot Credentials
+      API_ID: ${API_ID}
+      API_HASH: ${API_HASH}
+      BOT_TOKEN: ${BOT_TOKEN}
+      
+      # Database
+      MONGO_URI: ${MONGO_URI}
+      MONGO_DB: ${MONGO_DB}
+      
+      # Channels
+      MAIN_CHANNEL: ${MAIN_CHANNEL}
+      LOG_CHANNEL: ${LOG_CHANNEL:-}
+      FILE_STORE: ${FILE_STORE}
+      DATABASE_CHANNEL: ${DATABASE_CHANNEL:-}
+      
+      # Owner & Admins
+      OWNER: ${OWNER}
+      ADMINS: ${ADMINS:-}
+      FSUB_CHATS: ${FSUB_CHATS:-}
+      
+      # Bot Settings
+      BOT_USERNAME: ${BOT_USERNAME}
+      RSS_ITEMS: ${RSS_ITEMS}
+      
+      # Customization
+      AS_DOC: ${AS_DOC:-True}
+      THUMB: ${THUMB}
+      AUTO_DEL: ${AUTO_DEL:-True}
+      DEL_TIMER: ${DEL_TIMER:-600}
+      START_PHOTO: ${START_PHOTO}
+      ABOUT_PHOTO: ${ABOUT_PHOTO}
+      HELP_PHOTO: ${HELP_PHOTO}
+      QUALS: ${QUALS:-CODE}
+    
+    volumes:
+      # Mount directories for persistence
+      - ./encode:/usr/src/app/encode
+      - ./downloads:/usr/src/app/downloads
+      - ./thumbs:/usr/src/app/thumbs
+      - ./log.txt:/usr/src/app/log.txt
+    
+    networks:
+      - app-network
+    
+    # Resource limits (adjust based on your system)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+networks:
+  app-network:
+    driver: bridge
+
+# To run:
+# 1. Copy config.env or create one from .env.example
+# 2. docker-compose --env-file config.env up -d
+#
+# To view logs:
+# docker-compose logs -f bot
+#
+# To stop:
+# docker-compose down
