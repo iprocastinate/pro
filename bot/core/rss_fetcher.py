@@ -167,6 +167,18 @@ async def should_auto_upload():
 
 async def torrent_processor():
     LOGS.info("Torrent Processor Started!")
+
+
+async def database_poster_loop(interval: int = 3600):
+    """Periodically attempt to post a random video from the database."""
+    LOGS.info("Database poster loop started!")
+    from .database_poster import post_database_video
+    while True:
+        await asleep(interval)
+        try:
+            await post_database_video()
+        except Exception as e:
+            LOGS.error(f"Error in database poster loop: {e}")
     while True:
         await asleep(2)
         if not ani_cache['processing_torrent'] and len(ani_cache['torrent_queue']) > 0:
