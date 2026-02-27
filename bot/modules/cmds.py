@@ -523,3 +523,25 @@ async def add_task(client, message):
     except Exception as e:
         await rep.report(f"Error in addtask: {str(e)}", "error")
         await sendMessage(message, f"<b>Error adding task:</b> {str(e)}")
+
+
+@bot.on_message(command('postdb') & private & user([Var.OWNER] + Var.ADMINS))
+@new_task
+async def post_database_video_cmd(client, message):
+    """Post a random video from DATABASE_CHANNEL to MAIN_CHANNEL"""
+    try:
+        from bot.core.database_poster import post_database_video
+        
+        temp = await sendMessage(message, "<b><blockquote>ғᴇᴛᴄʜɪɴɢ ᴀ ʀᴀɴᴅᴏᴍ ᴠɪᴅᴇᴏ...</blockquote></b>")
+        
+        result = await post_database_video()
+        
+        if result:
+            await editMessage(temp, "<b><blockquote>✓ ᴠɪᴅᴇᴏ ᴘᴏsᴛᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!</blockquote></b>")
+            LOGS.info(f"Database video posted by {message.from_user.id}")
+        else:
+            await editMessage(temp, "<b><blockquote>✗ ғᴀɪʟᴇᴅ ᴛᴏ ғɪɴᴅ ᴀ sᴜɪᴛᴀʙʟᴇ ᴠɪᴅᴇᴏ.</blockquote></b>")
+            
+    except Exception as e:
+        LOGS.error(f"Error in post_database_video_cmd: {str(e)}")
+        await sendMessage(message, f"<b><blockquote>ᴇʀʀᴏʀ: {str(e)}</blockquote></b>")
