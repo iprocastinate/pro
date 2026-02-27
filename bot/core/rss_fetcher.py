@@ -393,7 +393,7 @@ async def get_rss(title: str, torrent_url: str, publish_date=None, size=None,
                 if is_batch:
                     pass
                 else:
-                    link = f"https://telegram.me/{(await bot.get_me()).username}?start={await encode('get-'+str(msg_id * abs(Var.FILE_STORE)))}"
+                    link = f"https://telegram.me/{Var.FILESTORE_BOT_USERNAME}?start={await encode('get-'+str(msg_id * abs(Var.FILE_STORE)))}"
                     
                     if len(btns) != 0 and len(btns[-1]) == 1:
                         btns[-1].insert(1, InlineKeyboardButton(f"{btn_formatter[qual]}", url=link))
@@ -420,7 +420,7 @@ async def get_rss(title: str, torrent_url: str, publish_date=None, size=None,
         batch_btns = None
         if len(video_files) > 1 and batch_first_msg_id is not None:
             batch_string = f"get-{batch_first_msg_id * abs(Var.FILE_STORE)}-{batch_last_msg_id * abs(Var.FILE_STORE)}"
-            batch_link = f"https://telegram.me/{(await bot.get_me()).username}?start={await encode(batch_string)}"
+            batch_link = f"https://telegram.me/{Var.FILESTORE_BOT_USERNAME}?start={await encode(batch_string)}"
             batch_btns = [[InlineKeyboardButton(f"{btn_formatter['CODE']}", url=batch_link)]]
             LOGS.info(f"Batch link created: {batch_string[:50]}...")
         
