@@ -431,6 +431,7 @@ async def add_task(client, message):
         
         input_link = args[1]
         
+        # support /addtask telegram -> random file
         if input_link.lower() == "telegram":
             if not Var.DATABASE_CHANNEL or Var.DATABASE_CHANNEL == 0:
                 return await sendMessage(message, "<b>DATABASE_CHANNEL not configured!</b>")
@@ -467,6 +468,64 @@ async def add_task(client, message):
                 'force': True
             })
             LOGS.info(f"Telegram file queued: {title[:50]}. Queue size: {len(ani_cache['torrent_queue'])}")
+            return
+        
+        # support /addtask db<msgid> to queue specific database file
+        if input_link.lower().startswith("db") and len(input_link) > 2 and input_link[2:].isdigit():
+            if not Var.DATABASE_CHANNEL or Var.DATABASE_CHANNEL == 0:
+                return await sendMessage(message, "<b>DATABASE_CHANNEL not configured!</b>")
+            
+            try:
+                msg_id = int(input_link[2:])
+            except ValueError:
+                return await sendMessage(message, "<b>Invalid database message ID!</b>")
+            
+            # fetch specified message from database channel
+            try:
+                db_msg = await bot.get_messages(Var.DATABASE_CHANNEL, message_ids=msg_id)
+            except Exception as e:
+                LOGS.error(f"Error fetching message {msg_id} from DATABASE_CHANNEL: {e}")
+                return await sendMessage(message, "<b>Error accessing DATABASE_CHANNEL</b>")
+            
+            if not db_msg or db_msg.empty:
+                return await sendMessage(message, "<b>No message found with that ID in DATABASE_CHANNEL!</b>")
+            
+            # determine file type
+            if db_msg.video:
+                title = db_msg.video.file_name or f"Video_{msg_id}"
+                file_id = db_msg.video.file_id
+                file_size = db_msg.video.file_size
+            elif db_msg.document:
+                title = db_msg.document.file_name or f"Doc_{msg_id}"
+                file_id = db_msg.document.file_id
+                file_size = db_msg.document.file_size
+            else:
+                return await sendMessage(message, "<b>Specified message does not contain a video/document</b>")
+            
+            size_gb = file_size / (1024**3)
+            if size_gb >= 1:
+                size_str = f"{size_gb:.2f} GB"
+            else:
+                size_mb = file_size / (1024**2)
+                size_str = f"{size_mb:.2f} MB" if size_mb >= 1 else f"{file_size / 1024:.2f} KB"
+            
+            await sendMessage(message, f"<i><b>Database File Task Added!</b></i>\n\n    • <b>File Name :</b> {title}\n    • <b>Size :</b> {size_str}\n    • <b>Source ID :</b> {msg_id}")
+            
+            ani_cache['torrent_queue'].insert(0, {
+                'title': title,
+                'file_id': file_id,
+                'file_size': file_size,
+                'is_telegram': True,
+                'size': size_str,
+                'category': None,
+                'seeders': 0,
+                'leechers': 0,
+                'info_hash': None,
+                'torrent_url': None,
+                'publish_date': None,
+                'force': True
+            })
+            LOGS.info(f"Database file queued: {title[:50]} (msg {msg_id}). Queue size: {len(ani_cache['torrent_queue'])}")
             return
         
         if input_link.startswith("magnet"):
@@ -545,3 +604,62 @@ async def post_database_video_cmd(client, message):
     except Exception as e:
         LOGS.error(f"Error in post_database_video_cmd: {str(e)}")
         await sendMessage(message, f"<b><blockquote>ᴇʀʀᴏʀ: {str(e)}</blockquote></b>")
+
+
+# quick add from database using /db<msgid> format
+@bot.on_message(private & user([Var.OWNER] + Var.ADMINS))
+async def quick_db_add(client, message):
+    text = message.text or ''
+    if not text.lower().startswith('/db'):
+        return
+    import re
+    m = re.match(r'^/db(\d+)', text.lower())
+    if not m:
+        return
+    msg_id = int(m.group(1))
+
+    if not Var.DATABASE_CHANNEL or Var.DATABASE_CHANNEL == 0:
+        return await sendMessage(message, "<b>DATABASE_CHANNEL not configured!</b>")
+    try:
+        db_msg = await bot.get_messages(Var.DATABASE_CHANNEL, message_ids=msg_id)
+    except Exception as e:
+        LOGS.error(f"Error fetching message {msg_id} from DATABASE_CHANNEL: {e}")
+        return await sendMessage(message, "<b>Error accessing DATABASE_CHANNEL</b>")
+    if not db_msg or db_msg.empty:
+        return await sendMessage(message, "<b>No message found with that ID in DATABASE_CHANNEL!</b>")
+
+    if db_msg.video:
+        title = db_msg.video.file_name or f"Video_{msg_id}"
+        file_id = db_msg.video.file_id
+        file_size = db_msg.video.file_size
+    elif db_msg.document:
+        title = db_msg.document.file_name or f"Doc_{msg_id}"
+        file_id = db_msg.document.file_id
+        file_size = db_msg.document.file_size
+    else:
+        return await sendMessage(message, "<b>Specified message does not contain a video/document</b>")
+
+    size_gb = file_size / (1024**3)
+    if size_gb >= 1:
+        size_str = f"{size_gb:.2f} GB"
+    else:
+        size_mb = file_size / (1024**2)
+        size_str = f"{size_mb:.2f} MB" if size_mb >= 1 else f"{file_size / 1024:.2f} KB"
+
+    await sendMessage(message, f"<i><b>Database File Task Added!</b></i>\n\n    • <b>File Name :</b> {title}\n    • <b>Size :</b> {size_str}\n    • <b>Source ID :</b> {msg_id}")
+    
+    ani_cache['torrent_queue'].insert(0, {
+        'title': title,
+        'file_id': file_id,
+        'file_size': file_size,
+        'is_telegram': True,
+        'size': size_str,
+        'category': None,
+        'seeders': 0,
+        'leechers': 0,
+        'info_hash': None,
+        'torrent_url': None,
+        'publish_date': None,
+        'force': True
+    })
+    LOGS.info(f"Database file queued via quick command: {title[:50]} (msg {msg_id}). Queue size: {len(ani_cache['torrent_queue'])}")
