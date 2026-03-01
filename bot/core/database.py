@@ -148,9 +148,12 @@ class MongoDB:
             return {
                 'enabled': settings.get('AUTO_UPLOAD_ENABLED', False),
                 'day_limit': settings.get('UPLOAD_DAY_LIMIT', 1),
-                'upload_time': settings.get('UPLOAD_TIME', '12:00 PM')
+                'upload_time': settings.get('UPLOAD_TIME', '12:00 PM'),
+                'time_window_enabled': settings.get('UPLOAD_TIME_WINDOW_ENABLED', False),
+                'upload_start_time': settings.get('UPLOAD_START_TIME', '00:00'),
+                'upload_stop_time': settings.get('UPLOAD_STOP_TIME', '23:59')
             }
-        return {'enabled': False, 'day_limit': 1, 'upload_time': '12:00 PM'}
+        return {'enabled': False, 'day_limit': 1, 'upload_time': '12:00 PM', 'time_window_enabled': False, 'upload_start_time': '00:00', 'upload_stop_time': '23:59'}
 
     async def increment_daily_uploads(self):
         """Increment the daily upload counter for today"""
@@ -199,6 +202,21 @@ class MongoDB:
             {
                 '$set': {
                     'UPLOADS_TODAY': 0,
+                    'updated_at': datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+
+    async def set_upload_time_window(self, enabled: bool, start_time: str = '00:00', stop_time: str = '23:59'):
+        """Set upload time window settings"""
+        await self.__settings.update_one(
+            {'_id': 'bot_settings'},
+            {
+                '$set': {
+                    'UPLOAD_TIME_WINDOW_ENABLED': enabled,
+                    'UPLOAD_START_TIME': start_time,
+                    'UPLOAD_STOP_TIME': stop_time,
                     'updated_at': datetime.utcnow()
                 }
             },
