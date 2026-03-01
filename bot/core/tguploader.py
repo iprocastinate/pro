@@ -33,14 +33,14 @@ class TgUploader:
                 )
             else:
                 return await self.__client.send_video(chat_id=Var.FILE_STORE,
-                    document=path,
+                    video=path,
                     thumb="thumb.jpg" if ospath.exists("thumb.jpg") else None,
                     caption=f"<b>{self.__name}</b>",
                     progress=self.progress_status
                 )
         except FloodWait as e:
             sleep(e.value * 1.5)
-            return await upload(path, qual, thumbnail)
+            return await self.upload(path, qual)
         except Exception as e:
             await rep.report(format_exc(), "error")
             raise e
