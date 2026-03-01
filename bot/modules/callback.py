@@ -362,13 +362,18 @@ async def auto_upload_settings_cb(_, cb):
     day_limit = ani_cache.get('UPLOAD_DAY_LIMIT', 1)
     upload_time = ani_cache.get('UPLOAD_TIME', '12:00')
     uploads_today = ani_cache.get('UPLOADS_TODAY', 0)
+    time_window_enabled = ani_cache.get('UPLOAD_TIME_WINDOW_ENABLED', False)
+    upload_start_time = ani_cache.get('UPLOAD_START_TIME', '00:00')
+    upload_stop_time = ani_cache.get('UPLOAD_STOP_TIME', '23:59')
     status = "𝗘𝗡𝗔𝗕𝗟𝗘𝗗" if enabled else "𝗗𝗜𝗦𝗔𝗕𝗟𝗘𝗗"
+    window_status = "𝗢𝗡" if time_window_enabled else "𝗢𝗙𝗙"
     
-    text = f"<b><blockquote>✦ 𝗔𝗨𝗧𝗢 𝗨𝗣𝗟𝗢𝗔𝗗 𝗦𝗘𝗧𝗧𝗜𝗡𝗚𝗦 ✦</blockquote>\n──────────────────\n<blockquote>✦ 𝗦𝗧𝗔𝗧𝗨𝗦: {status}\n✦ 𝗗𝗔𝗜𝗟𝗬 𝗟𝗜𝗠𝗜𝗧: {day_limit}\n✦ 𝗨𝗣𝗟𝗢𝗔𝗗𝗘𝗗 𝗧𝗢𝗗𝗔𝗬: {uploads_today}\n✦ 𝗨𝗣𝗟𝗢𝗔𝗗 𝗧𝗜𝗠𝗘: {upload_time}</blockquote>\n──────────────────</b>"
+    text = f"<b><blockquote>✦ 𝗔𝗨𝗧𝗢 𝗨𝗣𝗟𝗢𝗔𝗗 𝗦𝗘𝗧𝗧𝗜𝗡𝗚𝗦 ✦</blockquote>\n──────────────────\n<blockquote>✦ 𝗦𝗧𝗔𝗧𝗨𝗦: {status}\n✦ 𝗗𝗔𝗜𝗟𝗬 𝗟𝗜𝗠𝗜𝗧: {day_limit}\n✦ 𝗨𝗣𝗟𝗢𝗔𝗗𝗘𝗗 𝗧𝗢𝗗𝗔𝗬: {uploads_today}\n✦ 𝗨𝗣𝗟𝗢𝗔𝗗 𝗧𝗜𝗠𝗘: {upload_time}\n\n✦ 𝗧𝗜𝗠𝗘 𝗪𝗜𝗡𝗗𝗢𝗪: {window_status}\n✦ 𝗪𝗜𝗡𝗗𝗢𝗪 𝗥𝗔𝗡𝗚𝗘: {upload_start_time} - {upload_stop_time}</blockquote>\n──────────────────</b>"
     
     btns = [
         [InlineKeyboardButton("✦ 𝗦𝗘𝗧 𝗗𝗔𝗬 𝗟𝗜𝗠𝗜𝗧", callback_data="set_day_upload_cb"),
          InlineKeyboardButton("𝗦𝗘𝗧 𝗨𝗣𝗟𝗢𝗔𝗗 𝗧𝗜𝗠𝗘 ✦", callback_data="set_upload_time_cb")],
+        [InlineKeyboardButton("✦ 𝗦𝗘𝗧 𝗧𝗜𝗠𝗘 𝗪𝗜𝗡𝗗𝗢𝗪", callback_data="set_time_window_cb")],
         [InlineKeyboardButton("✦ 𝗦𝗘𝗧 𝗔𝗨𝗧𝗢 𝗨𝗣𝗟𝗢𝗔𝗗 ✦", callback_data="set_auto_upload_cb")],
         [InlineKeyboardButton("✦ 𝗕𝗔𝗖𝗞", callback_data="content_settings_cb"),
          InlineKeyboardButton("𝗖𝗟𝗢𝗦𝗘 ✦", callback_data="close_cb")]
@@ -405,6 +410,66 @@ async def set_upload_time_cb(_, cb):
         pass
     
     ani_cache['pending_action'] = {'action': 'set_upload_time', 'user_id': cb.from_user.id}
+
+async def set_time_window_cb(_, cb):
+    uid = cb.from_user.id
+    
+    await cb.answer()
+    time_window_enabled = ani_cache.get('UPLOAD_TIME_WINDOW_ENABLED', False)
+    window_status = "𝗘𝗡𝗔𝗕𝗟𝗘𝗗" if time_window_enabled else "𝗗𝗜𝗦𝗔𝗕𝗟𝗘𝗗"
+    
+    text = f"<b><blockquote>✦ 𝗨𝗟𝗧𝗥𝗔𝗧𝗢 𝗦𝖊𝖙𝗜𝗟𝗧 𝗦𝗡𝖎𝖘 ✦</blockquote>\n<blockquote>𝗦𝗧𝗔𝗧𝗨𝗦: {window_status}</blockquote></b>"
+    
+    btns = [
+        [InlineKeyboardButton("✦ 𝗘𝗡𝗔𝗕𝗟𝗘", callback_data="time_window_on_cb"),
+         InlineKeyboardButton("𝗗𝗜𝗦𝗔𝗕𝗚𝗫 ✦", callback_data="time_window_off_cb")],
+        [InlineKeyboardButton("✦ 𝗦𝗘𝗧 𝗦𝗧𝗔𝗥𝗧 𝗧𝗜𝗠𝗘", callback_data="set_window_start_cb"),
+         InlineKeyboardButton("𝗦𝗘𝗧 𝗦𝗧𝗢𝗣 𝗧𝗜𝗠𝗘 ✦", callback_data="set_window_stop_cb")],
+        [InlineKeyboardButton("✦ 𝗕𝗔𝗖𝗞", callback_data="auto_upload_settings_cb"),
+         InlineKeyboardButton("𝗖𝗟𝗢𝗦𝗘 ✦", callback_data="close_cb")]
+    ]
+    markup = InlineKeyboardMarkup(btns)
+    
+    try:
+        await cb.message.edit_text(text, reply_markup=markup)
+    except MessageNotModified:
+        pass
+
+async def time_window_on_cb(_, cb):
+    await cb.answer('ᴛɪᴍᴇ ᴡɪɴᴅᴏᴡ ʜᴀs ʙᴇᴇɴ ᴇɴᴀʙʟᴇᴅ.', show_alert=True)
+    ani_cache['UPLOAD_TIME_WINDOW_ENABLED'] = True
+    await db.set_upload_time_window(True, ani_cache.get('UPLOAD_START_TIME', '00:00'), ani_cache.get('UPLOAD_STOP_TIME', '23:59'))
+
+async def time_window_off_cb(_, cb):
+    await cb.answer('ᴛɪᴍᴇ ᴡɪɴᴅᴏᴡ ʜᴀs ʙᴇᴇɴ ᴅɪsᴀʙʟᴇᴅ.', show_alert=True)
+    ani_cache['UPLOAD_TIME_WINDOW_ENABLED'] = False
+    await db.set_upload_time_window(False, ani_cache.get('UPLOAD_START_TIME', '00:00'), ani_cache.get('UPLOAD_STOP_TIME', '23:59'))
+
+async def set_window_start_cb(_, cb):
+    uid = cb.from_user.id
+    
+    await cb.answer()
+    text = "<b><blockquote>✦ 𝗦𝗘𝗧 𝗦𝖙𝗒𝗥𝗧 𝗧𝗜𝗠𝗘 ✦</blockquote>\n──────────────────\n<blockquote>• ʀᴇᴘʟʏ ᴡɪᴛʜ ᴛɪᴍᴇ ɪɴ 24ʜʀ ғᴏʀᴍᴀᴛ:\n• ᴇxᴀᴍᴘʟᴇ: 08:00 ᴏʀ 14:30</blockquote>\n──────────────────\n<blockquote>✦ ᴘᴏᴡᴇʀᴇᴅ ʙʏ: <a href='https://t.me/Mirage_Botz'>𝗠𝗜𝗥𝗔𝗚𝗘— 𝗕𝗢𝗧𝗭</a></blockquote></b>"
+
+    try:
+        await cb.message.edit_text(text)
+    except MessageNotModified:
+        pass
+    
+    ani_cache['pending_action'] = {'action': 'set_window_start_time', 'user_id': cb.from_user.id}
+
+async def set_window_stop_cb(_, cb):
+    uid = cb.from_user.id
+    
+    await cb.answer()
+    text = "<b><blockquote>✦ 𝗦𝗘𝗧 𝗦𝗧𝗢𝗣 𝗧𝗜𝗠𝗘 ✦</blockquote>\n──────────────────\n<blockquote>• ʀᴇᴘʟʏ ᴡɪᴛʜ ᴛɪᴍᴇ ɪɴ 24ʜʀ ғᴏʀᴍᴀᴛ:\n• ᴇxᴀᴍᴘʟᴇ: 23:59 ᴏʀ 06:00</blockquote>\n──────────────────\n<blockquote>✦ ᴘᴏᴡᴇʀᴇᴅ ʙʏ: <a href='https://t.me/Mirage_Botz'>𝗠𝗜𝗥𝗔𝗚𝗘— 𝗕𝗢𝗧𝗭</a></blockquote></b>"
+
+    try:
+        await cb.message.edit_text(text)
+    except MessageNotModified:
+        pass
+    
+    ani_cache['pending_action'] = {'action': 'set_window_stop_time', 'user_id': cb.from_user.id}
 
 async def set_auto_upload_cb(_, cb):
     
@@ -625,6 +690,7 @@ async def handle_callbacks(client, cb):
     sensitive_operations = [
         "bot_settings_cb", "bot_mode_cb", "white_mode_set_cb", "default_mode_set_cb",
         "auto_upload_settings_cb", "set_day_upload_cb", "set_upload_time_cb", "set_auto_upload_cb",
+        "set_time_window_cb", "time_window_on_cb", "time_window_off_cb", "set_window_start_cb", "set_window_stop_cb",
         "auto_upload_on_cb", "auto_upload_off_cb", "user_settings_cb",
         "add_whitelist_cb", "remove_whitelist_cb", "list_whitelist_cb",
         "add_admin_cb", "remove_admin_cb", "list_admin_cb",
@@ -674,6 +740,16 @@ async def handle_callbacks(client, cb):
         await auto_upload_on_cb(client, cb)
     elif data == "auto_upload_off_cb":
         await auto_upload_off_cb(client, cb)
+    elif data == "set_time_window_cb":
+        await set_time_window_cb(client, cb)
+    elif data == "time_window_on_cb":
+        await time_window_on_cb(client, cb)
+    elif data == "time_window_off_cb":
+        await time_window_off_cb(client, cb)
+    elif data == "set_window_start_cb":
+        await set_window_start_cb(client, cb)
+    elif data == "set_window_stop_cb":
+        await set_window_stop_cb(client, cb)
     elif data == "user_settings_cb":
         await user_settings_cb(client, cb)
     elif data == "add_whitelist_cb":
