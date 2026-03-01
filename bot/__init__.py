@@ -35,7 +35,10 @@ ani_cache = {
     'UPLOAD_TIME': '12:00',
     'UPLOADS_TODAY': 0,
     'LAST_UPLOAD_DATE': None,
-    'LAST_UPLOAD_TIME': None
+    'LAST_UPLOAD_TIME': None,
+    'UPLOAD_TIME_WINDOW_ENABLED': False,
+    'UPLOAD_START_TIME': '00:00',
+    'UPLOAD_STOP_TIME': '23:59'
 }
 ffpids_cache = list()
 
