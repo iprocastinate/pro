@@ -101,6 +101,9 @@ async def load_bot_settings():
         ani_cache["AUTO_UPLOAD_ENABLED"] = auto_upload.get("enabled", False)
         ani_cache["UPLOAD_DAY_LIMIT"] = auto_upload.get("day_limit", 0)
         ani_cache["UPLOAD_TIME"] = auto_upload.get("upload_time", "00:00")
+        ani_cache["UPLOAD_TIME_WINDOW_ENABLED"] = auto_upload.get("time_window_enabled", False)
+        ani_cache["UPLOAD_START_TIME"] = auto_upload.get("upload_start_time", "00:00")
+        ani_cache["UPLOAD_STOP_TIME"] = auto_upload.get("upload_stop_time", "23:59")
 
         LOGS.info("Bot settings loaded successfully")
 
