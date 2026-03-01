@@ -175,6 +175,62 @@ async def handle_whitelist_input(client, message):
         
         action = pending.get('action')
         
+        if action == 'set_window_start_time':
+            try:
+                time_input = message.text.strip()
+                time_parts = time_input.split(':')
+                if len(time_parts) != 2:
+                    raise ValueError("Invalid time format")
+                hour = int(time_parts[0])
+                minute = int(time_parts[1])
+                if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+                    raise ValueError("Invalid hour or minute")
+                formatted_time = f"{hour:02d}:{minute:02d}"
+                
+                ani_cache['UPLOAD_START_TIME'] = formatted_time
+                await db.set_upload_time_window(
+                    ani_cache.get('UPLOAD_TIME_WINDOW_ENABLED', False),
+                    formatted_time,
+                    ani_cache.get('UPLOAD_STOP_TIME', '23:59')
+                )
+                await sendMessage(message, f"<b><blockquote>ᴜʟᴏᴀᴅ ᴡɪɴᴅᴏᴡ sᴛᴀʀᴛ ᴛɪᴍᴇ sᴇᴛ ᴛᴏ {formatted_time}!</blockquote></b>")
+                LOGS.info(f"Upload window start time set to {formatted_time} by {message.from_user.id}")
+            except ValueError as ve:
+                await sendMessage(message, f"<b><blockquote>ɪɴᴠᴀʟɪᴅ ᴛɪᴍᴇ ғᴏʀᴍᴀᴛ: {str(ve)}\nᴜsᴇ 24ʜʀ ғᴏʀᴍᴀᴛ (ᴇ.ɢ., 08:00)</blockquote></b>")
+            except Exception as e:
+                LOGS.error(f"Error setting window start time: {str(e)}")
+                await sendMessage(message, f"<b><blockquote>ᴇʀʀᴏʀ: {str(e)}</blockquote></b>")
+            ani_cache['pending_action'] = None
+            return
+        
+        if action == 'set_window_stop_time':
+            try:
+                time_input = message.text.strip()
+                time_parts = time_input.split(':')
+                if len(time_parts) != 2:
+                    raise ValueError("Invalid time format")
+                hour = int(time_parts[0])
+                minute = int(time_parts[1])
+                if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+                    raise ValueError("Invalid hour or minute")
+                formatted_time = f"{hour:02d}:{minute:02d}"
+                
+                ani_cache['UPLOAD_STOP_TIME'] = formatted_time
+                await db.set_upload_time_window(
+                    ani_cache.get('UPLOAD_TIME_WINDOW_ENABLED', False),
+                    ani_cache.get('UPLOAD_START_TIME', '00:00'),
+                    formatted_time
+                )
+                await sendMessage(message, f"<b><blockquote>ᴜʟᴏᴀᴅ ᴡɪɴᴅᴏᴡ sᴛᴏᴘ ᴛɪᴍᴇ sᴇᴛ ᴛᴏ {formatted_time}!</blockquote></b>")
+                LOGS.info(f"Upload window stop time set to {formatted_time} by {message.from_user.id}")
+            except ValueError as ve:
+                await sendMessage(message, f"<b><blockquote>ɪɴᴠᴀʟɪᴅ ᴛɪᴍᴇ ғᴏʀᴍᴀᴛ: {str(ve)}\nᴜsᴇ 24ʜʀ ғᴏʀᴍᴀᴛ (ᴇ.ɢ., 23:59)</blockquote></b>")
+            except Exception as e:
+                LOGS.error(f"Error setting window stop time: {str(e)}")
+                await sendMessage(message, f"<b><blockquote>ᴇʀʀᴏʀ: {str(e)}</blockquote></b>")
+            ani_cache['pending_action'] = None
+            return
+        
         if action == 'set_upload_time':
             try:
                 time_input = message.text.strip().upper()
