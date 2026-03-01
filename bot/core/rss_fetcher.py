@@ -133,6 +133,37 @@ async def should_auto_upload():
             LOGS.info(f"Daily upload limit reached: {uploads_today}/{day_limit}")
             return False
         
+        # Check time window if enabled
+        if settings['time_window_enabled']:
+            current_dt = datetime.now()
+            current_time = current_dt.time()
+            
+            start_time_str = settings['upload_start_time']
+            stop_time_str = settings['upload_stop_time']
+            
+            try:
+                start_time = datetime.strptime(start_time_str, "%H:%M").time()
+                stop_time = datetime.strptime(stop_time_str, "%H:%M").time()
+            except ValueError:
+                LOGS.warning(f"Could not parse upload times: {start_time_str} to {stop_time_str}")
+                return False
+            
+            # Check if current time is within the window
+            if start_time <= stop_time:
+                # Normal case: 08:00 to 23:59
+                if not (start_time <= current_time <= stop_time):
+                    LOGS.info(f"Outside upload window. Current: {current_time.hour:02d}:{current_time.minute:02d}, Window: {start_time.hour:02d}:{start_time.minute:02d}-{stop_time.hour:02d}:{stop_time.minute:02d}")
+                    return False
+            else:
+                # Overnight case: 23:00 to 06:00
+                if not (current_time >= start_time or current_time <= stop_time):
+                    LOGS.info(f"Outside upload window. Current: {current_time.hour:02d}:{current_time.minute:02d}, Window: {start_time.hour:02d}:{start_time.minute:02d}-{stop_time.hour:02d}:{stop_time.minute:02d} (overnight)")
+                    return False
+            
+            LOGS.info(f"Within upload time window. Current: {current_time.hour:02d}:{current_time.minute:02d}, Window: {start_time.hour:02d}:{start_time.minute:02d}-{stop_time.hour:02d}:{stop_time.minute:02d}")
+            await db.increment_daily_uploads()
+            return True
+        
         # Check if current time is past the scheduled upload time
         ist = timezone(timedelta(hours=5, minutes=30))
         current_dt = datetime.now(ist)
